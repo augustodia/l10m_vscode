@@ -1,7 +1,7 @@
 {
-  "name": "class",
-  "displayName": "class",
-  "description": "",
+  "name": "flutter-l10m",
+  "displayName": "Flutter l10m",
+  "description": "Flutter module localization extension",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.87.0"
@@ -9,20 +9,25 @@
   "categories": [
     "Other"
   ],
-  
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:yourExtensionCommand"
-],
+    "onStartupFinished"
+  ],
   "main": "./extension.js",
   "contributes": {
-    "commands": [{
-      "command": "class.helloWorld",
-      "title": "Hello World"
-    }]
+    "configuration": {
+      "title": "Flutter l10m",
+      "properties": {
+        "l10m.command": {
+          "type": "string",
+          "default": "dart run l10m",
+          "description": "Custom command to execute when a .arb file is changed"
+        }
+      }
+    }
   },
   "scripts": {
     "lint": "eslint .",
+    "package": "vsce package",
     "pretest": "yarn run lint",
     "test": "vscode-test"
   },

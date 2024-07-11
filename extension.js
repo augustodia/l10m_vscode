@@ -1,96 +1,70 @@
+const vscode = require("vscode");
+const cp = require("child_process");
 
-const vscode = require('vscode');
-const fs = require('fs');
-
-// Função para logar eventos em um arquivo JSON
-function logEvent(eventType, data) {
-    const logPath = `${vscode.workspace.rootPath}/eventLog.json`;
-    const timestamp = new Date().toISOString();
-    const logEntry = { timestamp, eventType, data };
-
-    // Lê o arquivo de log atual, adiciona a nova entrada, e salva novamente
-    fs.readFile(logPath, (err, content) => {
-        let logs = [];
-        if (!err) {
-            logs = JSON.parse(content);
-        }
-        logs.push(logEntry);
-
-        fs.writeFile(logPath, JSON.stringify(logs, null, 2), err => {
-            if (err) {
-                return console.error(`Falha ao escrever no log: ${err}`);
-            }
-        });
-    });
+function executeCommand(command, rootPath) {
+  cp.exec(command, { cwd: rootPath }, (error, stdout, stderr) => {
+    if (error) {
+      vscode.window.showErrorMessage(
+        `Erro ao executar o comando: ${error.message}`
+      );
+      return;
+    }
+    if (stderr) {
+      vscode.window.showErrorMessage(`Erro ao executar o comando: ${stderr}`);
+      return;
+    }
+    vscode.window.showInformationMessage(
+      `Comando executado com sucesso: ${stdout}`
+    );
+  });
 }
 
 function activate(context) {
-    // Monitora a transição entre arquivos
-    vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (editor) {
-            const data = {
-                fileName: editor.document.fileName,
-            }
+  // Cria um observador de arquivos para arquivos .arb
+  let watcher = vscode.workspace.createFileSystemWatcher("**/*.arb");
 
-            logEvent('FileTransition', data);
-        }
-    }, null, context.subscriptions);
+  // Executa o comando quando um arquivo .arb é alterado
+  watcher.onDidChange((uri) => {
+    let commandToRun =
+      "dart run l10m -t intl_pt.arb -m lib/features --no-generate-root";
+    let commandParts = commandToRun.split(" ");
 
-    // Monitora a criação de arquivos e pastas
-    vscode.workspace.onDidCreateFiles(event => {
-        event.files.forEach(file => {
-        const isDirectory = fs.lstatSync(file.fsPath).isDirectory();
-            const data = {
-                fileName: file.fsPath,
-                isDirectory,
-            }
-            logEvent('FileCreation', data);
-        });
-    });
+    let moduleArgIndex = commandParts.indexOf("--m");
+    let modulePath =
+      moduleArgIndex !== -1 ? commandParts[moduleArgIndex + 1] : "lib/modules";
+    let arbPath = uri.path;
 
-    // Monitora mudanças nos documentos
-    vscode.workspace.onDidChangeTextDocument(event => {
-        const isLog = event.document.uri.includes('eventLog.json')
+    let featureName = arbPath.split(`${modulePath}/`)[1].split("/")[0];
 
-        if(isLog) return;
+    let rootPath = vscode.workspace.workspaceFolders[0].uri.path;
 
-        const data = {
-            fileName: event.document.fileName,
-            contentChanges: event.contentChanges,
-        }
-        
-        logEvent('DocumentChange', data);
-    });
+    let isModulePath = arbPath.includes(modulePath);
+    let isRootPath = arbPath.includes("lib/l10n");
+    let generateRoot = !commandParts.includes("--no-generate-root");
 
-    // Monitora a exclusão de arquivos e pastas
-    vscode.workspace.onDidDeleteFiles(event => {
-        event.files.forEach(file => {
-            const isDirectory = fs.lstatSync(file.fsPath).isDirectory();
-            const data = {
-                fileName: file.fsPath,
-                isDirectory,
-            }
-            logEvent('FileDeletion', data);
-        });
-    });
+    if (isRootPath && generateRoot) {
+      executeCommand(`${commandToRun} --generate-only-root`, rootPath);
+      return;
+    }
 
-    vscode.workspace.onDidRenameFiles(event => {
-        event.files.forEach(file => {
-            const isDirectory = fs.lstatSync(file.newUri.fsPath).isDirectory();
+    if (isModulePath && featureName) {
+      executeCommand(
+        `${commandToRun} -g ${featureName} --generate-only-module`,
+        rootPath
+      );
+      return;
+    }
 
-            const data = {
-                oldFileName: file.oldUri.fsPath,
-                newFileName: file.newUri.fsPath,
-                isDirectory
-            }
-            logEvent('FileRename', data);
-        });
-    })
+    executeCommand(commandToRun, rootPath);
+  });
+
+  // Adiciona o observador ao contexto de subscrições da extensão
+  context.subscriptions.push(watcher);
 }
 
 function deactivate() {}
 
 module.exports = {
-    activate,
-    deactivate
+  activate,
+  deactivate,
 };
