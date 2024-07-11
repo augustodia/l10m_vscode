@@ -1,21 +1,32 @@
 const vscode = require("vscode");
 const cp = require("child_process");
 
+let outputChannel = vscode.window.createOutputChannel("l10m");
 function executeCommand(command, rootPath) {
-  cp.exec(command, { cwd: rootPath }, (error, stdout, stderr) => {
+  cp.exec(command, { cwd: rootPath }, (error, stdout) => {
     if (error) {
-      vscode.window.showErrorMessage(
-        `Erro ao executar o comando: ${error.message}`
+      outputChannel.appendLine(
+        `Error while executing the command: ${command}. Error: ${error.message}`
       );
+
+      vscode.window.showErrorMessage(
+        `Error while executing the command: ${command}`,
+        {
+          detail: error.message,
+        }
+      );
+
+      outputChannel.show();
+
       return;
     }
-    if (stderr) {
-      vscode.window.showErrorMessage(`Erro ao executar o comando: ${stderr}`);
-      return;
-    }
+
     vscode.window.showInformationMessage(
-      `Comando executado com sucesso: ${stdout}`
+      `Command executed successfully: ${stdout}`
     );
+
+    outputChannel.appendLine(`Command executed successfully: ${stdout}`);
+    outputChannel.show();
   });
 }
 
@@ -25,37 +36,53 @@ function activate(context) {
 
   // Executa o comando quando um arquivo .arb é alterado
   watcher.onDidChange((uri) => {
-    let commandToRun =
-      "dart run l10m -t intl_pt.arb -m lib/features --no-generate-root";
-    let commandParts = commandToRun.split(" ");
+    try {
+      let commandToRun = vscode.workspace
+        .getConfiguration("l10m")
+        .get("command");
+      let commandParts = commandToRun.split(" ");
 
-    let moduleArgIndex = commandParts.indexOf("--m");
-    let modulePath =
-      moduleArgIndex !== -1 ? commandParts[moduleArgIndex + 1] : "lib/modules";
-    let arbPath = uri.path;
+      let moduleArgIndex = commandParts.indexOf("-m");
+      let modulePath =
+        moduleArgIndex !== -1
+          ? commandParts[moduleArgIndex + 1]
+          : "lib/modules";
+      let arbPath = uri.path;
 
-    let featureName = arbPath.split(`${modulePath}/`)[1].split("/")[0];
+      let rootPath = vscode.workspace.workspaceFolders[0].uri.path;
 
-    let rootPath = vscode.workspace.workspaceFolders[0].uri.path;
+      let isModulePath = arbPath.includes(modulePath);
+      let isRootPath = arbPath.includes("lib/l10n");
+      let generateRoot = !commandParts.includes("--no-generate-root");
 
-    let isModulePath = arbPath.includes(modulePath);
-    let isRootPath = arbPath.includes("lib/l10n");
-    let generateRoot = !commandParts.includes("--no-generate-root");
+      if (isRootPath && generateRoot) {
+        executeCommand(`${commandToRun} --generate-only-root`, rootPath);
+        return;
+      }
 
-    if (isRootPath && generateRoot) {
-      executeCommand(`${commandToRun} --generate-only-root`, rootPath);
-      return;
+      if (!arbPath.includes(modulePath))
+        throw new Error("The arb file is not in the module path");
+
+      let featureName = arbPath.split(`${modulePath}/`)[1].split("/")[0];
+
+      if (isModulePath && featureName) {
+        executeCommand(
+          `${commandToRun} -g ${featureName} --generate-only-module`,
+          rootPath
+        );
+        return;
+      }
+
+      executeCommand(commandToRun, rootPath);
+    } catch (error) {
+      outputChannel.appendLine(`Error: ${error.message}`);
+
+      vscode.window.showErrorMessage(error, {
+        detail: error.message,
+      });
+
+      outputChannel.show();
     }
-
-    if (isModulePath && featureName) {
-      executeCommand(
-        `${commandToRun} -g ${featureName} --generate-only-module`,
-        rootPath
-      );
-      return;
-    }
-
-    executeCommand(commandToRun, rootPath);
   });
 
   // Adiciona o observador ao contexto de subscrições da extensão
