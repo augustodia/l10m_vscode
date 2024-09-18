@@ -47,10 +47,13 @@ function activate(context) {
       let commandParts = commandToRun.split(" ");
 
       let moduleArgIndex = commandParts.indexOf("-m");
-      let modulePath =
-        moduleArgIndex !== -1
-          ? commandParts[moduleArgIndex + 1]
-          : "lib/modules";
+      let modulePath = path.join("lib", "modules");
+
+      if (moduleArgIndex !== -1) {
+        const modulePathArray = commandParts[moduleArgIndex + 1].split("/");
+        modulePath = path.join(...modulePathArray);
+      }
+
       let arbPath = uri.fsPath;
 
       let rootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -68,7 +71,7 @@ function activate(context) {
         throw new Error("The arb file is not in the module path");
 
       let relativePath = path.relative(rootPath, arbPath);
-      let featureName = relativePath.split(path.sep)[1];
+      let featureName = relativePath.split(path.sep)[2];
 
       if (isModulePath && featureName) {
         executeCommand(
