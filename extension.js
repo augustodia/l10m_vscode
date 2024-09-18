@@ -2,96 +2,17 @@ const vscode = require("vscode");
 const cp = require("child_process");
 const path = require("path");
 
-let outputChannel = vscode.window.createOutputChannel("l10m");
+const CONFIG_SECTION = "l10m";
+const COMMAND_KEY = "command";
+const OUTPUT_CHANNEL_NAME = "l10m";
 
-function executeCommand(command, rootPath) {
-  cp.exec(
-    command,
-    { cwd: rootPath, env: process.env },
-    (error, stdout, stderr) => {
-      if (error) {
-        outputChannel.appendLine(
-          `Error while executing the command: ${command}. Error: ${error.message}`
-        );
-
-        vscode.window.showErrorMessage(
-          `Error while executing the command: ${command}`,
-          {
-            detail: error.message,
-          }
-        );
-
-        outputChannel.show();
-
-        return;
-      }
-
-      vscode.window.showInformationMessage(
-        `Command executed successfully: ${stdout}`
-      );
-
-      outputChannel.appendLine(`Command executed successfully: ${stdout}`);
-      outputChannel.show();
-    }
-  );
-}
+const outputChannel = vscode.window.createOutputChannel(OUTPUT_CHANNEL_NAME);
 
 function activate(context) {
-  let watcher = vscode.workspace.createFileSystemWatcher("**/*.arb");
+  const watcher = vscode.workspace.createFileSystemWatcher("**/*.arb");
+  const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
 
-  watcher.onDidChange((uri) => {
-    try {
-      let commandToRun = vscode.workspace
-        .getConfiguration("l10m")
-        .get("command");
-      let commandParts = commandToRun.split(" ");
-
-      let moduleArgIndex = commandParts.indexOf("-m");
-      let modulePath = path.join("lib", "modules");
-
-      if (moduleArgIndex !== -1) {
-        const modulePathArray = commandParts[moduleArgIndex + 1].split("/");
-        modulePath = path.join(...modulePathArray);
-      }
-
-      let arbPath = uri.fsPath;
-
-      let rootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
-
-      let isModulePath = arbPath.includes(modulePath);
-      let isRootPath = arbPath.includes(path.join("lib", "l10n"));
-      let generateRoot = !commandParts.includes("--no-generate-root");
-
-      if (isRootPath && generateRoot) {
-        executeCommand(`${commandToRun} --generate-only-root`, rootPath);
-        return;
-      }
-
-      if (!arbPath.includes(modulePath))
-        throw new Error("The arb file is not in the module path");
-
-      let relativePath = path.relative(rootPath, arbPath);
-      let featureName = relativePath.split(path.sep)[2];
-
-      if (isModulePath && featureName) {
-        executeCommand(
-          `${commandToRun} -g ${featureName} --generate-only-module`,
-          rootPath
-        );
-        return;
-      }
-
-      executeCommand(commandToRun, rootPath);
-    } catch (error) {
-      outputChannel.appendLine(`Error: ${error.message}`);
-
-      vscode.window.showErrorMessage(error.message, {
-        detail: error.message,
-      });
-
-      outputChannel.show();
-    }
-  });
+  watcher.onDidChange((uri) => handleArbFileChange(uri, workspaceRoot));
 
   context.subscriptions.push(watcher);
 }
@@ -102,3 +23,105 @@ module.exports = {
   activate,
   deactivate,
 };
+
+function handleArbFileChange(uri, workspaceRoot) {
+  try {
+    const commandToRun = getCommandToRun();
+    const commandParts = commandToRun.split(" ");
+
+    const modulePath = getModulePath(commandParts);
+    const generateRoot = !commandParts.includes("--no-generate-root");
+
+    const arbFilePath = uri.fsPath;
+
+    const isModulePath = arbFilePath.includes(modulePath);
+    const isRootPath = arbFilePath.includes(path.join("lib", "l10n"));
+
+    if (isRootPath && generateRoot) {
+      const command = `${commandToRun} --generate-only-root`;
+      executeCommand(command, workspaceRoot);
+      return;
+    }
+
+    if (!isModulePath) {
+      throw new Error("The arb file is not in the module path");
+    }
+
+    const featureName = getFeatureName(arbFilePath, workspaceRoot, modulePath);
+
+    if (featureName) {
+      const command = `${commandToRun} -g ${featureName} --generate-only-module`;
+      executeCommand(command, workspaceRoot);
+      return;
+    }
+
+    executeCommand(commandToRun, workspaceRoot);
+  } catch (error) {
+    logError(error);
+  }
+}
+
+function getCommandToRun() {
+  return vscode.workspace.getConfiguration(CONFIG_SECTION).get(COMMAND_KEY);
+}
+
+function getModulePath(commandParts) {
+  const moduleArgIndex = commandParts.indexOf("-m");
+  if (moduleArgIndex !== -1 && commandParts.length > moduleArgIndex + 1) {
+    const modulePathInput = commandParts[moduleArgIndex + 1];
+    const modulePathArray = modulePathInput.split(/[\\/]/);
+    return path.join(...modulePathArray);
+  }
+  return path.join("lib", "modules");
+}
+
+function getFeatureName(arbFilePath, workspaceRoot, modulePath) {
+  const relativePath = path.relative(
+    path.join(workspaceRoot, modulePath),
+    arbFilePath
+  );
+  const pathSegments = relativePath.split(path.sep);
+  return pathSegments[0];
+}
+
+function executeCommand(command, workingDirectory) {
+  outputChannel.appendLine(`Executing command: ${command}`);
+  vscode.window.setStatusBarMessage(`Executing command: ${command}`, 5000);
+
+  cp.exec(
+    command,
+    { cwd: workingDirectory, env: process.env },
+    (error, stdout, stderr) => {
+      if (error) {
+        logCommandError(command, error);
+        return;
+      }
+
+      logCommandSuccess(command, stdout);
+    }
+  );
+}
+
+function logCommandError(command, error) {
+  const message = `Error while executing the command: ${command}. Error: ${error.message}`;
+  outputChannel.appendLine(message);
+  vscode.window.setStatusBarMessage(message, 5000);
+  outputChannel.show(true);
+}
+
+function logCommandSuccess(command, stdout) {
+  const message = `Command executed successfully: ${command}\nOutput: ${stdout}`;
+  outputChannel.appendLine(message);
+  vscode.window.setStatusBarMessage(
+    `Command executed successfully: ${command}`,
+    5000
+  );
+  outputChannel.show(true);
+}
+
+function logError(error) {
+  const message = `Error: ${error.message}`;
+  outputChannel.appendLine(message);
+  vscode.window.setStatusBarMessage(message, 5000);
+  outputChannel.show(true);
+}
