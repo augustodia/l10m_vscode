@@ -91,7 +91,7 @@ function executeCommand(command, workingDirectory) {
   cp.exec(
     command,
     { cwd: workingDirectory, env: process.env },
-    (error, stdout, stderr) => {
+    (error, stdout) => {
       if (error) {
         logCommandError(command, error);
         return;
@@ -125,3 +125,10 @@ function logError(error) {
   vscode.window.setStatusBarMessage(message, 5000);
   outputChannel.show(true);
 }
+
+module.exports = {
+  activate,
+  deactivate,
+  handleArbFileChange,
+  outputChannel,
+};
