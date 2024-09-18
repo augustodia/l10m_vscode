@@ -1,40 +1,44 @@
 const vscode = require("vscode");
 const cp = require("child_process");
+const path = require("path");
 
 let outputChannel = vscode.window.createOutputChannel("l10m");
+
 function executeCommand(command, rootPath) {
-  cp.exec(command, { cwd: rootPath }, (error, stdout) => {
-    if (error) {
-      outputChannel.appendLine(
-        `Error while executing the command: ${command}. Error: ${error.message}`
+  cp.exec(
+    command,
+    { cwd: rootPath, env: process.env },
+    (error, stdout, stderr) => {
+      if (error) {
+        outputChannel.appendLine(
+          `Error while executing the command: ${command}. Error: ${error.message}`
+        );
+
+        vscode.window.showErrorMessage(
+          `Error while executing the command: ${command}`,
+          {
+            detail: error.message,
+          }
+        );
+
+        outputChannel.show();
+
+        return;
+      }
+
+      vscode.window.showInformationMessage(
+        `Command executed successfully: ${stdout}`
       );
 
-      vscode.window.showErrorMessage(
-        `Error while executing the command: ${command}`,
-        {
-          detail: error.message,
-        }
-      );
-
+      outputChannel.appendLine(`Command executed successfully: ${stdout}`);
       outputChannel.show();
-
-      return;
     }
-
-    vscode.window.showInformationMessage(
-      `Command executed successfully: ${stdout}`
-    );
-
-    outputChannel.appendLine(`Command executed successfully: ${stdout}`);
-    outputChannel.show();
-  });
+  );
 }
 
 function activate(context) {
-  // Cria um observador de arquivos para arquivos .arb
   let watcher = vscode.workspace.createFileSystemWatcher("**/*.arb");
 
-  // Executa o comando quando um arquivo .arb é alterado
   watcher.onDidChange((uri) => {
     try {
       let commandToRun = vscode.workspace
@@ -47,12 +51,12 @@ function activate(context) {
         moduleArgIndex !== -1
           ? commandParts[moduleArgIndex + 1]
           : "lib/modules";
-      let arbPath = uri.path;
+      let arbPath = uri.fsPath;
 
-      let rootPath = vscode.workspace.workspaceFolders[0].uri.path;
+      let rootPath = vscode.workspace.workspaceFolders[0].uri.fsPath;
 
       let isModulePath = arbPath.includes(modulePath);
-      let isRootPath = arbPath.includes("lib/l10n");
+      let isRootPath = arbPath.includes(path.join("lib", "l10n"));
       let generateRoot = !commandParts.includes("--no-generate-root");
 
       if (isRootPath && generateRoot) {
@@ -63,7 +67,8 @@ function activate(context) {
       if (!arbPath.includes(modulePath))
         throw new Error("The arb file is not in the module path");
 
-      let featureName = arbPath.split(`${modulePath}/`)[1].split("/")[0];
+      let relativePath = path.relative(rootPath, arbPath);
+      let featureName = relativePath.split(path.sep)[1];
 
       if (isModulePath && featureName) {
         executeCommand(
@@ -77,7 +82,7 @@ function activate(context) {
     } catch (error) {
       outputChannel.appendLine(`Error: ${error.message}`);
 
-      vscode.window.showErrorMessage(error, {
+      vscode.window.showErrorMessage(error.message, {
         detail: error.message,
       });
 
@@ -85,7 +90,6 @@ function activate(context) {
     }
   });
 
-  // Adiciona o observador ao contexto de subscrições da extensão
   context.subscriptions.push(watcher);
 }
 
