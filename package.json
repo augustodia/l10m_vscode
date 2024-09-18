@@ -2,12 +2,17 @@
   "name": "flutter-l10m",
   "displayName": "Flutter l10m",
   "description": "Flutter module localization extension",
-  "version": "0.0.2",
+  "version": "1.0.0",
+  "publisher": "augustodia",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/augustodia/flutter-l10m.git"
+  },
   "engines": {
     "vscode": "^1.87.0"
   },
   "categories": [
-    "Other"
+    "Localization"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -29,7 +34,7 @@
     "lint": "eslint .",
     "package": "vsce package",
     "pretest": "yarn run lint",
-    "test": "vscode-test"
+    "test": "node ./test/runTest.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.87.0",
@@ -38,6 +43,33 @@
     "eslint": "^8.56.0",
     "typescript": "^5.3.3",
     "@vscode/test-cli": "^0.0.6",
-    "@vscode/test-electron": "^2.3.9"
-  }
+    "@vscode/test-electron": "^2.3.9",
+    "mocha": "^8.2.1",
+    "sinon": "^9.2.1"
+  },
+  "keywords": [
+    "flutter",
+    "localization",
+    "l10n",
+    "i18n",
+    "dart",
+    "translation"
+  ],
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#185abd",
+    "theme": "dark"
+  },
+  "badges": [
+    {
+      "url": "https://img.shields.io/github/stars/augustodia/flutter-l10m.svg",
+      "href": "https://github.com/augustodia/flutter-l10m",
+      "description": "GitHub Stars"
+    }
+  ],
+  "bugs": {
+    "url": "https://github.com/augustodia/flutter-l10m/issues"
+  },
+  "homepage": "https://github.com/augustodia/flutter-l10m#readme",
+  "license": "MIT"
 }

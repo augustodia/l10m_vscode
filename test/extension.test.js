@@ -1,15 +1,145 @@
-const assert = require('assert');
+const assert = require("assert");
+const vscode = require("vscode");
+const myExtension = require("../extension");
+const sinon = require("sinon");
+const path = require("path");
+const cp = require("child_process");
 
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
-const vscode = require('vscode');
-// const myExtension = require('../extension');
+suite("Extension Test Suite", () => {
+  vscode.window.showInformationMessage("Starting all tests.");
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+  let sandbox;
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
-	});
+  setup(() => {
+    sandbox = sinon.createSandbox();
+  });
+
+  teardown(() => {
+    sandbox.restore();
+  });
+
+  test("The extension should activate", async () => {
+    const extensionId = "augustodia.flutter-l10m";
+    const extension = vscode.extensions.getExtension(extensionId);
+    assert.ok(extension, "The extension was not found");
+
+    assert.ok(extension.isActive, "The extension was not activated");
+  });
+
+  test("handleArbFileChange executes the correct command in the module path", () => {
+    sandbox.stub(vscode.window, "createOutputChannel").returns({
+      appendLine: sandbox.stub(),
+      show: sandbox.stub(),
+    });
+    sandbox.stub(vscode.workspace, "getConfiguration").returns({
+      get: sandbox
+        .stub()
+        .withArgs("command")
+        .returns("dart run l10m -m lib/modules"),
+    });
+
+    const outputChannelAppendLineStub = sandbox.stub(
+      myExtension.outputChannel,
+      "appendLine"
+    );
+    const setStatusBarMessageStub = sandbox.stub(
+      vscode.window,
+      "setStatusBarMessage"
+    );
+
+    const execStub = sandbox
+      .stub(cp, "exec")
+      .callsFake((command, options, callback) => {
+        callback(null, "command output", "");
+      });
+
+    const workspaceRoot = "/path/to/workspace";
+    const arbFileUri = vscode.Uri.file(
+      path.join(workspaceRoot, "lib", "modules", "feature1", "file.arb")
+    );
+
+    myExtension.handleArbFileChange(arbFileUri, workspaceRoot);
+
+    assert.ok(execStub.calledOnce);
+    const expectedCommand =
+      "dart run l10m -m lib/modules -g feature1 --generate-only-module";
+    assert.strictEqual(execStub.firstCall.args[0], expectedCommand);
+
+    assert.ok(outputChannelAppendLineStub.called);
+    assert.ok(setStatusBarMessageStub.called);
+  });
+
+  test("handleArbFileChange executes the correct command in the root path", () => {
+    sandbox.stub(vscode.window, "createOutputChannel").returns({
+      appendLine: sandbox.stub(),
+      show: sandbox.stub(),
+    });
+    sandbox.stub(vscode.workspace, "getConfiguration").returns({
+      get: sandbox.stub().withArgs("command").returns("dart run l10m"),
+    });
+
+    const outputChannelAppendLineStub = sandbox.stub(
+      myExtension.outputChannel,
+      "appendLine"
+    );
+    const setStatusBarMessageStub = sandbox.stub(
+      vscode.window,
+      "setStatusBarMessage"
+    );
+
+    const execStub = sandbox
+      .stub(cp, "exec")
+      .callsFake((command, options, callback) => {
+        callback(null, "command output", "");
+      });
+
+    const workspaceRoot = "/path/to/workspace";
+    const arbFileUri = vscode.Uri.file(
+      path.join(workspaceRoot, "lib", "l10n", "app_en.arb")
+    );
+
+    myExtension.handleArbFileChange(arbFileUri, workspaceRoot);
+
+    assert.ok(execStub.calledOnce);
+    const expectedCommand = "dart run l10m --generate-only-root";
+    assert.strictEqual(execStub.firstCall.args[0], expectedCommand);
+
+    assert.ok(outputChannelAppendLineStub.called);
+    assert.ok(setStatusBarMessageStub.called);
+  });
+
+  test("handleArbFileChange handles errors appropriately", () => {
+    sandbox.stub(vscode.window, "createOutputChannel").returns({
+      appendLine: sandbox.stub(),
+      show: sandbox.stub(),
+    });
+    sandbox.stub(vscode.workspace, "getConfiguration").returns({
+      get: sandbox.stub().withArgs("command").returns("dart run l10m"),
+    });
+
+    const outputChannelAppendLineStub = sandbox.stub(
+      myExtension.outputChannel,
+      "appendLine"
+    );
+    const setStatusBarMessageStub = sandbox.stub(
+      vscode.window,
+      "setStatusBarMessage"
+    );
+
+    sandbox.stub(cp, "exec").callsFake((command, options, callback) => {
+      callback(new Error("Execution error"), "", "");
+    });
+
+    const workspaceRoot = "/path/to/workspace";
+    const arbFileUri = vscode.Uri.file(
+      path.join(workspaceRoot, "lib", "modules", "feature1", "file.arb")
+    );
+
+    myExtension.handleArbFileChange(arbFileUri, workspaceRoot);
+
+    assert.ok(outputChannelAppendLineStub.called);
+    assert.ok(setStatusBarMessageStub.called);
+    const errorMessage = `Error while executing the command: dart run l10m -g feature1 --generate-only-module. Error: Execution error`;
+    assert.ok(outputChannelAppendLineStub.calledWithMatch(errorMessage));
+  });
 });
